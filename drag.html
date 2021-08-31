@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+        }
+
+        .box {
+            position: relative;
+            margin: 50px auto;
+            width: 500px;
+            height: 500px;
+            border: 2px solid red;
+            overflow: hidden;
+        }
+
+        .avatar {
+            width: 200px;
+            height: 200px;
+            background-color: pink;
+            left: 50px;
+            top: 50px;
+            transform: translate(100px, 100px);
+        }
+
+        .avatar img {
+            width: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="box">
+        <div class="avatar">
+            <img src="./avatar1.jpg" draggable="false">
+        </div>
+    </div>
+    <script>
+        let oBox = document.querySelector('.box')
+        let oDiv = document.querySelector('.avatar')
+        let x // 鼠标按下时图片相对浏览器的位置
+        let y // 鼠标按下时图片相对浏览器的位置
+        let DELTA = 1.1 // 每次放大/缩小的倍数
+
+        // 鼠标按下 获取位置并添加事件监听
+        const mouseDown = e => {
+            let transf = getTransform(oDiv)
+            x = e.clientX - transf.transX // 图片初始位置
+            y = e.clientY - transf.transY // 图片初始位置
+            document.addEventListener('mousemove', mouseMove)
+            document.addEventListener('mouseup', mouseUp)
+        }
+
+        // 鼠标拖动 更新transform
+        const mouseMove = e => {
+            let multiple = getTransform(oDiv).multiple
+            let moveX = e.clientX - x // x向移动距离
+            let moveY = e.clientY - y // y向移动距离
+            let newTransf = limitBorder(oDiv, oBox, moveX, moveY, multiple)
+            oDiv.style.transform = `matrix(${multiple}, 0, 0, ${multiple}, ${newTransf.transX}, ${newTransf.transY})`
+        }
+
+        // 鼠标抬起 移除监听器
+        const mouseUp = () => {
+            document.removeEventListener('mousemove', mouseMove)
+            document.removeEventListener('mouseup', mouseUp)
+        }
+
+        // 鼠标滚轮缩放 更新transform
+        const zoom = e => {
+            let transf = getTransform(oDiv)
+            if (e.deltaY < 0) {
+                transf.multiple *= DELTA // 放大DELTA倍
+            } else {
+                transf.multiple /= DELTA // 缩小DELTA倍
+            }
+            let newTransf = limitBorder(oDiv, oBox, transf.transX, transf.transY, transf.multiple)
+            oDiv.style.transform = `matrix(${transf.multiple}, 0, 0, ${transf.multiple}, ${newTransf.transX}, ${newTransf.transY})`
+        }
+
+        /**
+         * 通过getComputedStyle获取transform矩阵 并用split分割
+         * 如 oDiv 的 transform: translate(100, 100);
+         * getComputedStyle可以取到"matrix(1, 0, 0, 1, 100, 100)"
+         * 当transform属性没有旋转rotate和拉伸skew时
+         * metrix的第1, 4, 5, 6个参数为 x方向倍数, y方向倍数, x方向偏移量, y方向偏移量
+         * 再分别利用 字符串分割 取到对应参数
+         */
+        const getTransform = DOM => {
+            let arr = getComputedStyle(DOM).transform.split(',')
+            return {
+                transX: isNaN(+arr[arr.length - 2]) ? 0 : +arr[arr.length - 2], // 获取translateX
+                transY: isNaN(+arr[arr.length - 1].split(')')[0]) ? 0 : +arr[arr.length - 1].split(')')[0], // 获取translateX
+                multiple: +arr[3] // 获取图片缩放比例
+            }
+        }
+
+        /**
+         * 获取边框限制的transform的x, y偏移量
+         * innerDOM: 内盒子DOM
+         * outerDOM: 边框盒子DOM
+         * moveX: 盒子的x移动距离
+         * moveY: 盒子的y移动距离
+         */
+        const limitBorder = (innerDOM, outerDOM, moveX, moveY, multiple) => {
+            let { clientWidth: innerWidth, clientHeight: innerHeight, offsetLeft: innerLeft, offsetTop: innerTop } = innerDOM
+            let { clientWidth: outerWidth, clientHeight: outerHeight } = outerDOM
+            let transX
+            let transY
+            // 放大的图片超出box时 图片最多拖动到与边框对齐
+            if (innerWidth * multiple > outerWidth || innerHeight * multiple > outerHeight) {
+                if (innerWidth * multiple > outerWidth && innerWidth * multiple > outerHeight) {
+                    transX = Math.min(Math.max(moveX, outerWidth - innerWidth * (multiple + 1) / 2 - innerLeft), -innerLeft + innerWidth * (multiple - 1) / 2)
+                    transY = Math.min(Math.max(moveY, outerHeight - innerHeight * (multiple + 1) / 2 - innerTop), -innerTop + innerHeight * (multiple - 1) / 2)
+                } else if (innerWidth * multiple > outerWidth && !(innerWidth * multiple > outerHeight)) {
+                    transX = Math.min(Math.max(moveX, outerWidth - innerWidth * (multiple + 1) / 2 - innerLeft), -innerLeft + innerWidth * (multiple - 1) / 2)
+                    transY = Math.max(Math.min(moveY, outerHeight - innerHeight * (multiple + 1) / 2 - innerTop), -innerTop + innerHeight * (multiple - 1) / 2)
+                } else if (!(innerWidth * multiple > outerWidth) && innerWidth * multiple > outerHeight) {
+                    transX = Math.max(Math.min(moveX, outerWidth - innerWidth * (multiple + 1) / 2 - innerLeft), -innerLeft + innerWidth * (multiple - 1) / 2)
+                    transY = Math.min(Math.max(moveY, outerHeight - innerHeight * (multiple + 1) / 2 - innerTop), -innerTop + innerHeight * (multiple - 1) / 2)
+                }
+            }
+            // 图片小于box大小时 图片不能拖出边框
+            else {
+                transX = Math.max(Math.min(moveX, outerWidth - innerWidth * (multiple + 1) / 2 - innerLeft), -innerLeft + innerWidth * (multiple - 1) / 2)
+                transY = Math.max(Math.min(moveY, outerHeight - innerHeight * (multiple + 1) / 2 - innerTop), -innerTop + innerHeight * (multiple - 1) / 2)
+            }
+            return { transX, transY }
+        }
+
+        const init = () => {
+            // 禁止选中文字/图片
+            document.addEventListener('selectstart', e => { e.preventDefault() })
+            // 鼠标按下事件
+            oDiv.addEventListener('mousedown', mouseDown)
+            // 图片缩放
+            oDiv.addEventListener('wheel', zoom)
+        }
+
+        init()
+    </script>
+</body>
+
+</html>
